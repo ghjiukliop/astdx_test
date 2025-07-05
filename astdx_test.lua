@@ -291,23 +291,31 @@ end
 
 -- ...existing code...
 
+-- ...existing code...
 
 local MacroSection = MacroTab:AddSection("Record/Play Macro")
 
 -- Thư mục lưu macro
-local macroFolder = "HTHubAS/Macros"
+local macroFolder = "ASTDX macro"
 if not isfolder(macroFolder) then
     makefolder(macroFolder)
 end
 
 -- Lấy danh sách file macro
--- ...existing code...
-
 local function getMacroFiles()
-    -- Đảm bảo thư mục tồn tại trước khi listfiles
-    if not isfolder(macroFolder) then
-        makefolder(macroFolder)
+    -- Đảm bảo folder tồn tại (tạo từng cấp nếu cần)
+    local folderParts = {}
+    for part in string.gmatch(macroFolder, "[^/\\]+") do
+        table.insert(folderParts, part)
     end
+    local path = ""
+    for i, part in ipairs(folderParts) do
+        path = path .. (i > 1 and "/" or "") .. part
+        if not isfolder(path) then
+            makefolder(path)
+        end
+    end
+
     local files = listfiles(macroFolder)
     local macroFiles = {}
     for _, file in ipairs(files) do
@@ -318,8 +326,6 @@ local function getMacroFiles()
     end
     return macroFiles
 end
-
--- ...existing code...
 
 -- Input để tạo file macro mới
 local macroFileName = ""
@@ -368,7 +374,6 @@ MacroSection:AddButton({
         macroDropdown:SetValues(getMacroFiles())
     end
 })
--- ...existing code...
 
 -- 2 Toggle: Record và Play
 local isRecording = false
@@ -553,6 +558,7 @@ macroDropdown:OnChanged(function(value)
     loadMacroFromFile()
 end)
 
+-- ...existing code...
 -- ...existing code...
 
 
