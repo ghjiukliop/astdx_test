@@ -301,7 +301,13 @@ if not isfolder(macroFolder) then
 end
 
 -- Lấy danh sách file macro
+-- ...existing code...
+
 local function getMacroFiles()
+    -- Đảm bảo thư mục tồn tại trước khi listfiles
+    if not isfolder(macroFolder) then
+        makefolder(macroFolder)
+    end
     local files = listfiles(macroFolder)
     local macroFiles = {}
     for _, file in ipairs(files) do
@@ -312,6 +318,8 @@ local function getMacroFiles()
     end
     return macroFiles
 end
+
+-- ...existing code...
 
 -- Input để tạo file macro mới
 local macroFileName = ""
