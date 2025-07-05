@@ -307,14 +307,12 @@ local function getUnitInfo(unit)
     return {
         Name = unit.Name,
         SpawnCFrame = unit:FindFirstChild("SpawnCFrame") and unit.SpawnCFrame.Value,
-        UpgradeLevel = unit:FindFirstChild("UpgradeLevel") and unit.UpgradeLevel.Value
+        UpgradeLevel = unit:FindFirstChild("UpgradeLevel") and unit.UpgradeLevel.Value or 0
     }
 end
 
--- 📝 Section macro trên MacroTab
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 
--- 🔘 Toggle thay cho button
 MacroSection:AddToggle("MacroRecorderToggle", {
     Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
@@ -339,9 +337,10 @@ MacroSection:AddToggle("MacroRecorderToggle", {
                     table.insert(macroSteps, {
                         Type = "Place",
                         UnitName = args[2][2],
-                        SpawnCFrame = args[2][3]
+                        SpawnCFrame = args[2][3],
+                        UpgradeLevel = 0 -- mặc định khi place
                     })
-                    print("📌 Recorded Place:", args[2][2])
+                    print("📌 Recorded Place:", args[2][2], args[2][3])
 
                 -- 🔍 UPGRADE
                 elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Upgrade" then
@@ -398,8 +397,6 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         end
     end
 end)
-
-
 
 
 
