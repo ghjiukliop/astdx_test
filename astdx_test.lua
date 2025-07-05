@@ -290,6 +290,7 @@ local function setupSaveEvents()
 end
 
 -- ...existing code...local Players = game:GetService("Players")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
@@ -301,6 +302,7 @@ local recording = false
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 local oldNamecall = mt.__namecall
+
 
 local function getUnitInfo(unit)
     return {
