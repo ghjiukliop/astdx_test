@@ -290,12 +290,14 @@ local function setupSaveEvents()
 end
 
 -- ...existing code...
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local playerName = player.Name
+
+local SetEvent = ReplicatedStorage.Remotes.SetEvent
+local GetFunction = ReplicatedStorage.Remotes.GetFunction
 
 local macroSteps = {}
 local stepIndex = 0
@@ -320,7 +322,7 @@ MacroSection:AddToggle("MacroRecorderToggle", {
 }):OnChanged(function(val)
     if val then
         if recording then
-            warn("🚫 Macro đang chạy rồi.")
+            warn("🚫 Macro đã đang chạy.")
             return
         end
         recording = true
@@ -333,8 +335,10 @@ MacroSection:AddToggle("MacroRecorderToggle", {
             local args = {...}
             local money = tostring(player:FindFirstChild("Money") and player.Money.Value or 0)
 
-            if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
-                if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
+            -- chỉ lọc đúng Remote
+            if recording and (self == SetEvent or self == GetFunction) then
+                -- PLACE
+                if self == SetEvent and args[1] == "GameStuff" and args[2][1] == "Summon" then
                     stepIndex = stepIndex + 1
                     macroSteps[tostring(stepIndex)] = {
                         type = "SpawnUnit",
@@ -344,7 +348,8 @@ MacroSection:AddToggle("MacroRecorderToggle", {
                     }
                     print("📌 Recorded Place:", args[2][2])
 
-                elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
+                -- UPGRADE
+                elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
                     local unit = args[2][2]
                     if unit and unit:FindFirstChild("SpawnCFrame") then
                         stepIndex = stepIndex + 1
@@ -357,7 +362,8 @@ MacroSection:AddToggle("MacroRecorderToggle", {
                         print("📌 Recorded Upgrade:", unit.Name)
                     end
 
-                elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
+                -- SELL
+                elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
                     local unit = args[2][2]
                     if unit and unit:FindFirstChild("SpawnCFrame") then
                         stepIndex = stepIndex + 1
@@ -375,7 +381,7 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         end)
     else
         if not recording then
-            warn("⚠️ Bạn chưa bật Macro.")
+            warn("⚠️ Macro chưa bật.")
             return
         end
         recording = false
@@ -398,6 +404,7 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         end
     end
 end)
+
 
 
 -- ...existing code...
