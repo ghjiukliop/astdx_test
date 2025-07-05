@@ -298,6 +298,13 @@ local playerName = player.Name
 
 local SetEvent = ReplicatedStorage.Remotes.SetEvent
 local GetFunction = ReplicatedStorage.Remotes.GetFunction
+-- ...existing code...
+
+-- === Macro Recorder Section (THAY THẾ TOÀN BỘ PHẦN NÀY) ===
+local macroFolder = "ASTDX macro"
+if not isfolder(macroFolder) then
+    makefolder(macroFolder)
+end
 
 getgenv().MacroRecording = false
 getgenv().MacroSteps = {}
@@ -308,10 +315,10 @@ local function cframeToString(cf)
     for i, v in ipairs(components) do
         components[i] = tostring(math.round(v * 1000) / 1000)
     end
-    return table.concat(components, ",")
+    return table.concat(components, ", ")
 end
 
--- Chỉ hook __namecall duy nhất 1 lần
+-- Hook __namecall để ghi lại các bước thao tác
 if not getgenv().HookedMacro then
     local mt = getrawmetatable(game)
     setreadonly(mt, false)
@@ -323,6 +330,7 @@ if not getgenv().HookedMacro then
         local money = tostring(player:FindFirstChild("Money") and player.Money.Value or 0)
 
         if getgenv().MacroRecording and (self == SetEvent or self == GetFunction) then
+            -- Place (Summon)
             if self == SetEvent and args[1] == "GameStuff" and args[2][1] == "Summon" then
                 getgenv().MacroStepIndex = getgenv().MacroStepIndex + 1
                 getgenv().MacroSteps[tostring(getgenv().MacroStepIndex)] = {
@@ -333,6 +341,7 @@ if not getgenv().HookedMacro then
                 }
                 print("📌 Recorded Place:", args[2][2])
 
+            -- Upgrade
             elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
                 local unit = args[2][2]
                 if unit and unit:FindFirstChild("SpawnCFrame") then
@@ -346,6 +355,7 @@ if not getgenv().HookedMacro then
                     print("📌 Recorded Upgrade:", unit.Name)
                 end
 
+            -- Sell
             elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
                 local unit = args[2][2]
                 if unit and unit:FindFirstChild("SpawnCFrame") then
@@ -365,10 +375,9 @@ if not getgenv().HookedMacro then
     getgenv().HookedMacro = true
 end
 
--- GUI Toggle
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 MacroSection:AddToggle("MacroRecorderToggle", {
-    Title = "🎥2 Ghi Macro (Place / Upgrade / Sell)",
+    Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
     Tooltip = "Bật để bắt đầu ghi macro. Tắt để stop & save."
 }):OnChanged(function(val)
@@ -389,25 +398,27 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         getgenv().MacroRecording = false
         print("🛑 Macro stopped.")
 
-        -- Save file
-        local saveData = getgenv().MacroSteps
-        saveData["Data"] = {
-            Map = "UnknownMap",
+        -- Thêm mục Data vào cuối file macro
+        getgenv().MacroSteps["Data"] = {
+            Map = "UnknownMap", -- Có thể lấy map thực tế nếu muốn
             RecordMode = "Money",
-            Units = {}
+            Units = {} -- Có thể tự động điền nếu muốn
         }
 
+        -- Lưu file macro
         if writefile then
-            local fileName = "Macro_" .. playerName .. ".json"
-            writefile(fileName, HttpService:JSONEncode(saveData))
+            local HttpService = game:GetService("HttpService")
+            local fileName = macroFolder .. "/Macro_" .. playerName .. ".json"
+            writefile(fileName, HttpService:JSONEncode(getgenv().MacroSteps))
             print("💾 Macro saved to", fileName)
         else
             warn("⚠ Executor không hỗ trợ writefile.")
         end
     end
 end)
+-- === HẾT PHẦN THAY THẾ ===
 
-
+-- ...existing code...
 
 -- ...existing code...
 
