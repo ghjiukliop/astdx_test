@@ -291,275 +291,111 @@ end
 
 -- ...existing code...
 
--- ...existing code...
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
-local MacroSection = MacroTab:AddSection("Record/Play Macro")
+local player = Players.LocalPlayer
+local playerName = player.Name
 
--- Thư mục lưu macro
-local macroFolder = "ASTDX macro"
-if not isfolder(macroFolder) then
-    makefolder(macroFolder)
+local macroSteps = {}
+local recording = false
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local oldNamecall = mt.__namecall
+
+local function getUnitInfo(unit)
+    return {
+        Name = unit.Name,
+        SpawnCFrame = unit:FindFirstChild("SpawnCFrame") and unit.SpawnCFrame.Value,
+        UpgradeLevel = unit:FindFirstChild("UpgradeLevel") and unit.UpgradeLevel.Value
+    }
 end
 
--- Lấy danh sách file macro
-local function getMacroFiles()
-    -- Đảm bảo folder tồn tại (tạo từng cấp nếu cần)
-    local folderParts = {}
-    for part in string.gmatch(macroFolder, "[^/\\]+") do
-        table.insert(folderParts, part)
-    end
-    local path = ""
-    for i, part in ipairs(folderParts) do
-        path = path .. (i > 1 and "/" or "") .. part
-        if not isfolder(path) then
-            makefolder(path)
-        end
-    end
+-- UI section
+local MacroSection = EventTab:AddSection("🎥 Macro Recorder")
 
-    local files = listfiles(macroFolder)
-    local macroFiles = {}
-    for _, file in ipairs(files) do
-        if file:match("%.json$") then
-            local name = file:match("([^\\/]*)%.json$")
-            table.insert(macroFiles, name)
-        end
+-- ▶️ Start Recording
+MacroSection:AddButton("▶️ Start Recording", function()
+    if recording then
+        warn("🚫 Macro đang chạy rồi!")
+        return
     end
-    return macroFiles
-end
+    recording = true
+    macroSteps = {}
+    print("🎬 Macro recording started...")
 
--- Input để tạo file macro mới
-local macroFileName = ""
-MacroSection:AddInput("MacroFileInput", {
-    Title = "Tạo file macro mới",
-    Placeholder = "Nhập tên macro và nhấn Enter",
-    Callback = function(value)
-        macroFileName = value
-    end,
-    OnEnter = function(value)
-        if value and value ~= "" then
-            local filePath = macroFolder .. "/" .. value .. ".json"
-            if not isfile(filePath) then
-                writefile(filePath, "[]")
-                Fluent:Notify({
-                    Title = "Macro",
-                    Content = "Đã tạo file macro: " .. value,
-                    Duration = 3
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+
+        if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
+            -- 🔍 PLACE
+            if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
+                table.insert(macroSteps, {
+                    Type = "Place",
+                    UnitName = args[2][2],
+                    SpawnCFrame = args[2][3]
                 })
-            else
-                Fluent:Notify({
-                    Title = "Macro",
-                    Content = "File macro đã tồn tại!",
-                    Duration = 3
+                print("📌 Recorded Place:", args[2][2], args[2][3])
+
+            -- 🔍 UPGRADE
+            elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Upgrade" then
+                local unit = args[2][2]
+                local info = getUnitInfo(unit)
+                table.insert(macroSteps, {
+                    Type = "Upgrade",
+                    UnitName = info.Name,
+                    SpawnCFrame = info.SpawnCFrame,
+                    UpgradeLevel = info.UpgradeLevel
                 })
+                print("📌 Recorded Upgrade:", info.Name, "to level", info.UpgradeLevel)
+
+            -- 🔍 SELL
+            elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Sell" then
+                local unit = args[2][2]
+                local info = getUnitInfo(unit)
+                table.insert(macroSteps, {
+                    Type = "Sell",
+                    UnitName = info.Name,
+                    SpawnCFrame = info.SpawnCFrame
+                })
+                print("📌 Recorded Sell:", info.Name)
             end
         end
-    end
-})
 
--- Dropdown chọn file macro
-local selectedMacro = nil
-local macroDropdown = MacroSection:AddDropdown("MacroFileDropdown", {
-    Title = "Chọn file macro",
-    Values = getMacroFiles(),
-    Multi = false,
-    Callback = function(value)
-        selectedMacro = value
-    end
-})
-
--- Làm mới dropdown khi tạo file mới
-MacroSection:AddButton({
-    Title = "Làm mới danh sách macro",
-    Callback = function()
-        macroDropdown:SetValues(getMacroFiles())
-    end
-})
-
--- 2 Toggle: Record và Play
-local isRecording = false
-local isPlaying = false
-local currentMacro = {}
-local macroPlayThread = nil
-
--- Hàm ghi thao tác vào macro
-local function recordAction(actionType, data)
-    if isRecording and selectedMacro then
-        table.insert(currentMacro, {
-            time = tick(),
-            action = actionType,
-            data = data
-        })
-        updateMacroStatus()
-    end
-end
-
--- Hook các thao tác: Place, Upgrade, Sell
--- Bạn cần gọi các hàm này khi thực hiện thao tác tương ứng trong UI/game
-
--- Ghi thao tác Place
-local function recordPlace(unitName, cframe)
-    recordAction("Place", {
-        unit = unitName,
-        cframe = {cframe.X, cframe.Y, cframe.Z, cframe:ToOrientation()}
-    })
-end
-
--- Ghi thao tác Upgrade
-local function recordUpgrade(unitName)
-    recordAction("Upgrade", {
-        unit = unitName
-    })
-end
-
--- Ghi thao tác Sell
-local function recordSell(unitName)
-    recordAction("Sell", {
-        unit = unitName
-    })
-end
-
--- Lưu macro ra file
-local function saveMacroToFile()
-    if selectedMacro then
-        local filePath = macroFolder .. "/" .. selectedMacro .. ".json"
-        local HttpService = game:GetService("HttpService")
-        writefile(filePath, HttpService:JSONEncode(currentMacro))
-    end
-end
-
--- Tải macro từ file
-local function loadMacroFromFile()
-    if selectedMacro then
-        local filePath = macroFolder .. "/" .. selectedMacro .. ".json"
-        if isfile(filePath) then
-            local HttpService = game:GetService("HttpService")
-            local content = readfile(filePath)
-            currentMacro = HttpService:JSONDecode(content)
-        else
-            currentMacro = {}
-        end
-    end
-end
-
--- Khi bật Record
-MacroSection:AddToggle("RecordMacroToggle", {
-    Title = "Record Macro",
-    Default = false,
-    Callback = function(state)
-        isRecording = state
-        if state then
-            currentMacro = {}
-            macroStatus.status = "Recording"
-            Fluent:Notify({Title = "Macro", Content = "Đang ghi macro...", Duration = 2})
-        else
-            macroStatus.status = "Idle"
-            saveMacroToFile()
-            Fluent:Notify({Title = "Macro", Content = "Đã dừng ghi macro.", Duration = 2})
-        end
-        updateMacroStatus()
-    end
-})
-
--- Khi bật Play
-MacroSection:AddToggle("PlayMacroToggle", {
-    Title = "Play Macro",
-    Default = false,
-    Callback = function(state)
-        isPlaying = state
-        if state then
-            macroStatus.status = "Playing"
-            loadMacroFromFile()
-            if macroPlayThread then
-                coroutine.close(macroPlayThread)
-            end
-            macroPlayThread = coroutine.create(function()
-                for i, action in ipairs(currentMacro) do
-                    macroStatus.action = i
-                    macroStatus.type = action.action
-                    macroStatus.unit = action.data.unit or ""
-                    macroStatus.waiting = ""
-                    updateMacroStatus()
-                    if action.action == "Place" then
-                        local c = action.data.cframe
-                        local cf = CFrame.new(c[1], c[2], c[3]) * CFrame.Angles(c[4], c[5], c[6])
-                        local args = {
-                            [1] = "GameStuff",
-                            [2] = {
-                                [1] = "Summon",
-                                [2] = action.data.unit,
-                                [3] = cf
-                            }
-                        }
-                        game:GetService("ReplicatedStorage").Remotes.SetEvent:FireServer(unpack(args))
-                    elseif action.action == "Upgrade" then
-                        local args = {
-                            [1] = {["Type"] = "GameStuff"},
-                            [2] = {
-                                [1] = "Upgrade",
-                                [2] = workspace.UnitFolder:FindFirstChild(action.data.unit)
-                            }
-                        }
-                        game:GetService("ReplicatedStorage").Remotes.GetFunction:InvokeServer(unpack(args))
-                    elseif action.action == "Sell" then
-                        local args = {
-                            [1] = {["Type"] = "GameStuff"},
-                            [2] = {
-                                [1] = "Sell",
-                                [2] = workspace.UnitFolder:FindFirstChild(action.data.unit)
-                            }
-                        }
-                        game:GetService("ReplicatedStorage").Remotes.GetFunction:InvokeServer(unpack(args))
-                    end
-                    wait(0.5) -- delay giữa các thao tác, có thể chỉnh
-                end
-                macroStatus.status = "Idle"
-                macroStatus.action = 0
-                macroStatus.type = ""
-                macroStatus.unit = ""
-                macroStatus.waiting = ""
-                updateMacroStatus()
-                Fluent:Notify({Title = "Macro", Content = "Đã chạy xong macro.", Duration = 2})
-            end)
-            coroutine.resume(macroPlayThread)
-            Fluent:Notify({Title = "Macro", Content = "Đang chạy macro...", Duration = 2})
-        else
-            macroStatus.status = "Idle"
-            macroStatus.action = 0
-            macroStatus.type = ""
-            macroStatus.unit = ""
-            macroStatus.waiting = ""
-            updateMacroStatus()
-            Fluent:Notify({Title = "Macro", Content = "Đã dừng chạy macro.", Duration = 2})
-        end
-    end
-})
-
--- Ô hiển thị trạng thái macro
-local statusParagraph = MacroSection:AddParagraph({
-    Title = "Macro Status",
-    Content = "Macro Status: Idle"
-})
-
-function updateMacroStatus()
-    local content = string.format(
-        "Macro Status: %s\nAction: %s\nType: %s\nUnit: %s\nWaiting for: %s",
-        macroStatus.status or "Idle",
-        macroStatus.action or "",
-        macroStatus.type or "",
-        macroStatus.unit or "",
-        macroStatus.waiting or ""
-    )
-    statusParagraph:SetContent(content)
-end
-
--- Khi chọn macro mới thì load lại
-macroDropdown:OnChanged(function(value)
-    selectedMacro = value
-    loadMacroFromFile()
+        return oldNamecall(self, unpack(args))
+    end)
 end)
 
--- ...existing code...
--- ...existing code...
+-- 💾 Stop & Save
+MacroSection:AddButton("💾 Stop & Save Macro", function()
+    if not recording then
+        warn("⚠️ Bạn chưa bắt đầu ghi Macro.")
+        return
+    end
+    recording = false
+
+    -- Khôi phục metatable
+    mt.__namecall = oldNamecall
+    print("🛑 Stopped recording & restored metatable.")
+
+    -- Ghi ra file
+    if writefile then
+        local data = HttpService:JSONEncode(macroSteps)
+        local fileName = "Macro_" .. playerName .. ".json"
+        writefile(fileName, data)
+        print("💾 Macro saved to", fileName)
+    else
+        print("⚠ Executor không hỗ trợ writefile.")
+    end
+
+    -- In toàn bộ step ra console
+    print("✅ Macro Steps:")
+    for i, step in ipairs(macroSteps) do
+        print(i, HttpService:JSONEncode(step))
+    end
+end)
 
 
 
