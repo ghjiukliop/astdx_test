@@ -296,113 +296,109 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local playerName = player.Name
--- ...existing code...
 
 local macroSteps = {}
+local stepIndex = 0
 local recording = false
-local hookPlaced = false
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 local oldNamecall = mt.__namecall
 
-local function getUnitName(unit)
-    if typeof(unit) == "Instance" then
-        return unit.Name
-    elseif typeof(unit) == "string" then
-        return unit
+local function cframeToString(cf)
+    local components = {cf:GetComponents()}
+    for i, v in ipairs(components) do
+        components[i] = tostring(math.round(v * 1000) / 1000)
     end
-    return tostring(unit)
-end
-
-local function getCFrameValue(cf)
-    if typeof(cf) == "CFrame" then
-        return {cf:GetComponents()}
-    end
-    return nil
+    return table.concat(components, ",")
 end
 
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 MacroSection:AddToggle("MacroRecorderToggle", {
-    Title = "🎥 2Ghi Macro (Place / Upgrade / Sell)",
+    Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
     Tooltip = "Bật để bắt đầu ghi macro. Tắt để stop & save."
 }):OnChanged(function(val)
     if val then
         if recording then
-            warn("🚫 Macro đã đang chạy!")
+            warn("🚫 Macro đang chạy rồi.")
             return
         end
         recording = true
         macroSteps = {}
+        stepIndex = 0
         print("🎬 Macro recording started...")
 
-        if not hookPlaced then
-            mt.__namecall = newcclosure(function(self, ...)
-                local method = getnamecallmethod()
-                local args = {...}
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+            local money = tostring(player:FindFirstChild("Money") and player.Money.Value or 0)
 
-                -- Record Place
-                if recording and method == "FireServer" and tostring(self) == "SetEvent" then
-                    if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
-                        table.insert(macroSteps, {
-                            Type = "Place",
-                            UnitName = getUnitName(args[2][2]),
-                            CFrameData = getCFrameValue(args[2][3])
-                        })
-                        print("📌 Recorded Place:", getUnitName(args[2][2]))
+            if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
+                if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
+                    stepIndex = stepIndex + 1
+                    macroSteps[tostring(stepIndex)] = {
+                        type = "SpawnUnit",
+                        unit = args[2][2],
+                        cframe = cframeToString(args[2][3]),
+                        money = money
+                    }
+                    print("📌 Recorded Place:", args[2][2])
+
+                elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
+                    local unit = args[2][2]
+                    if unit and unit:FindFirstChild("SpawnCFrame") then
+                        stepIndex = stepIndex + 1
+                        macroSteps[tostring(stepIndex)] = {
+                            type = "UpgradeUnit",
+                            unit = unit.Name,
+                            cframe = cframeToString(unit.SpawnCFrame.Value),
+                            money = money
+                        }
+                        print("📌 Recorded Upgrade:", unit.Name)
                     end
 
-                -- Record Upgrade
-                elseif recording and method == "InvokeServer" and tostring(self) == "GetFunction" then
-                    if args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
-                        table.insert(macroSteps, {
-                            Type = "Upgrade",
-                            UnitName = getUnitName(args[2][2])
-                        })
-                        print("📌 Recorded Upgrade:", getUnitName(args[2][2]))
-
-                -- Record Sell
-                    elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
-                        table.insert(macroSteps, {
-                            Type = "Sell",
-                            UnitName = getUnitName(args[2][2])
-                        })
-                        print("📌 Recorded Sell:", getUnitName(args[2][2]))
+                elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
+                    local unit = args[2][2]
+                    if unit and unit:FindFirstChild("SpawnCFrame") then
+                        stepIndex = stepIndex + 1
+                        macroSteps[tostring(stepIndex)] = {
+                            type = "SellUnit",
+                            unit = unit.Name,
+                            cframe = cframeToString(unit.SpawnCFrame.Value),
+                            money = money
+                        }
+                        print("📌 Recorded Sell:", unit.Name)
                     end
                 end
-                return oldNamecall(self, unpack(args))
-            end)
-            hookPlaced = true
-        end
-
+            end
+            return oldNamecall(self, unpack(args))
+        end)
     else
         if not recording then
             warn("⚠️ Bạn chưa bật Macro.")
             return
         end
         recording = false
+        mt.__namecall = oldNamecall
+        print("🛑 Macro stopped.")
 
-        print("🛑 Macro stopped. Preparing to save...")
+        local saveData = macroSteps
+        saveData["Data"] = {
+            Map = "UnknownMap",
+            RecordMode = "Money",
+            Units = {}
+        }
 
         if writefile then
-            local HttpService = game:GetService("HttpService")
-            local data = HttpService:JSONEncode(macroSteps)
-            local fileName = "ASTDX macro/Macro_" .. playerName .. ".json"
-            if not isfolder("ASTDX macro") then
-                makefolder("ASTDX macro")
-            end
-            writefile(fileName, data)
+            local fileName = "Macro_" .. playerName .. ".json"
+            writefile(fileName, HttpService:JSONEncode(saveData))
             print("💾 Macro saved to", fileName)
         else
-            print("⚠ Executor không hỗ trợ writefile.")
-        end
-
-        print("✅ Macro Steps:")
-        for i, step in ipairs(macroSteps) do
-            print(i, step.Type, step.UnitName)
+            warn("⚠ Executor không hỗ trợ writefile.")
         end
     end
 end)
+
 
 -- ...existing code...
 
