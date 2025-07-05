@@ -290,7 +290,6 @@ local function setupSaveEvents()
 end
 
 -- ...existing code...
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
@@ -312,8 +311,8 @@ local function getUnitInfo(unit)
     }
 end
 
--- UI section
-local MacroSection = EventTab:AddSection("🎥 Macro Recorder")
+-- 📝 Tạo section macro bên trong MacroTab
+local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 
 -- ▶️ Start Recording
 MacroSection:AddButton("▶️ Start Recording", function()
@@ -376,11 +375,11 @@ MacroSection:AddButton("💾 Stop & Save Macro", function()
     end
     recording = false
 
-    -- Khôi phục metatable
+    -- Khôi phục hook
     mt.__namecall = oldNamecall
     print("🛑 Stopped recording & restored metatable.")
 
-    -- Ghi ra file
+    -- Lưu file
     if writefile then
         local data = HttpService:JSONEncode(macroSteps)
         local fileName = "Macro_" .. playerName .. ".json"
@@ -390,12 +389,13 @@ MacroSection:AddButton("💾 Stop & Save Macro", function()
         print("⚠ Executor không hỗ trợ writefile.")
     end
 
-    -- In toàn bộ step ra console
+    -- In log
     print("✅ Macro Steps:")
     for i, step in ipairs(macroSteps) do
         print(i, HttpService:JSONEncode(step))
     end
 end)
+
 
 
 
