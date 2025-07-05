@@ -323,7 +323,7 @@ end
 
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 MacroSection:AddToggle("MacroRecorderToggle", {
-    Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
+    Title = "🎥 2Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
     Tooltip = "Bật để bắt đầu ghi macro. Tắt để stop & save."
 }):OnChanged(function(val)
