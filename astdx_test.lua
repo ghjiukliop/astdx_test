@@ -289,20 +289,29 @@ local function setupSaveEvents()
     end
 end
 
--- ...existing code...local Players = game:GetService("Players")
+-- ...existing code...
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
 local playerName = player.Name
 
+-- clone table fallback
+local function shallowClone(tbl)
+    local copy = {}
+    for k, v in pairs(tbl) do
+        copy[k] = v
+    end
+    return copy
+end
+
 local macroSteps = {}
 local recording = false
+local hookPlaced = false
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 local oldNamecall = mt.__namecall
-
 
 local function getUnitInfo(unit)
     return {
@@ -313,7 +322,6 @@ local function getUnitInfo(unit)
 end
 
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
-
 MacroSection:AddToggle("MacroRecorderToggle", {
     Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
@@ -328,48 +336,46 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         macroSteps = {}
         print("🎬 Macro recording started...")
 
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
+        if not hookPlaced then
+            mt.__namecall = newcclosure(function(self, ...)
+                local method = getnamecallmethod()
+                local args = {...}
 
-            if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
-                -- 🔍 PLACE
-                if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
-                    table.insert(macroSteps, {
-                        Type = "Place",
-                        UnitName = args[2][2],
-                        SpawnCFrame = args[2][3], -- dùng vị trí client gọi
-                        UpgradeLevel = 0
-                    })
-                    print("📌 Recorded Place:", args[2][2], args[2][3])
+                if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
+                    if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
+                        table.insert(macroSteps, {
+                            Type = "Place",
+                            UnitName = args[2][2],
+                            SpawnCFrame = args[2][3],
+                            UpgradeLevel = 0
+                        })
+                        print("📌 Recorded Place:", args[2][2])
 
-                -- 🔍 UPGRADE
-                elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Upgrade" then
-                    local unit = args[2][2]
-                    local info = getUnitInfo(unit)
-                    table.insert(macroSteps, {
-                        Type = "Upgrade",
-                        UnitName = info.Name,
-                        SpawnCFrame = info.SpawnCFrame,
-                        UpgradeLevel = info.UpgradeLevel
-                    })
-                    print("📌 Recorded Upgrade:", info.Name, "to level", info.UpgradeLevel)
+                    elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
+                        local info = getUnitInfo(args[2][2])
+                        table.insert(macroSteps, {
+                            Type = "Upgrade",
+                            UnitName = info.Name,
+                            SpawnCFrame = info.SpawnCFrame,
+                            UpgradeLevel = info.UpgradeLevel
+                        })
+                        print("📌 Recorded Upgrade:", info.Name, "to level", info.UpgradeLevel)
 
-                -- 🔍 SELL
-                elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Sell" then
-                    local unit = args[2][2]
-                    local info = getUnitInfo(unit)
-                    table.insert(macroSteps, {
-                        Type = "Sell",
-                        UnitName = info.Name,
-                        SpawnCFrame = info.SpawnCFrame
-                    })
-                    print("📌 Recorded Sell:", info.Name)
+                    elseif args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
+                        local info = getUnitInfo(args[2][2])
+                        table.insert(macroSteps, {
+                            Type = "Sell",
+                            UnitName = info.Name,
+                            SpawnCFrame = info.SpawnCFrame
+                        })
+                        print("📌 Recorded Sell:", info.Name)
+                    end
                 end
-            end
+                return oldNamecall(self, unpack(args))
+            end)
+            hookPlaced = true
+        end
 
-            return oldNamecall(self, unpack(args))
-        end)
     else
         if not recording then
             warn("⚠️ Bạn chưa bật Macro.")
@@ -377,11 +383,8 @@ MacroSection:AddToggle("MacroRecorderToggle", {
         end
         recording = false
 
-        -- Restore hook
-        mt.__namecall = oldNamecall
-        print("🛑 Macro stopped & hook restored.")
+        print("🛑 Macro stopped. Preparing to save...")
 
-        -- Save file
         if writefile then
             local data = HttpService:JSONEncode(macroSteps)
             local fileName = "Macro_" .. playerName .. ".json"
@@ -391,15 +394,12 @@ MacroSection:AddToggle("MacroRecorderToggle", {
             print("⚠ Executor không hỗ trợ writefile.")
         end
 
-        -- Log toàn bộ step
         print("✅ Macro Steps:")
         for i, step in ipairs(macroSteps) do
             print(i, HttpService:JSONEncode(step))
         end
     end
 end)
-
-
 
 -- Tích hợp với SaveManager
 SaveManager:SetLibrary(Fluent)
