@@ -311,90 +311,94 @@ local function getUnitInfo(unit)
     }
 end
 
--- 📝 Tạo section macro bên trong MacroTab
+-- 📝 Section macro trên MacroTab
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 
--- ▶️ Start Recording
-MacroSection:AddButton("▶️ Start Recording", function()
-    if recording then
-        warn("🚫 Macro đang chạy rồi!")
-        return
-    end
-    recording = true
-    macroSteps = {}
-    print("🎬 Macro recording started...")
+-- 🔘 Toggle thay cho button
+MacroSection:AddToggle("MacroRecorderToggle", {
+    Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
+    Default = false,
+    Tooltip = "Bật để bắt đầu ghi macro. Tắt để stop & save."
+}):OnChanged(function(val)
+    if val then
+        if recording then
+            warn("🚫 Macro đã đang chạy!")
+            return
+        end
+        recording = true
+        macroSteps = {}
+        print("🎬 Macro recording started...")
 
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
 
-        if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
-            -- 🔍 PLACE
-            if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
-                table.insert(macroSteps, {
-                    Type = "Place",
-                    UnitName = args[2][2],
-                    SpawnCFrame = args[2][3]
-                })
-                print("📌 Recorded Place:", args[2][2], args[2][3])
+            if recording and (method == "InvokeServer" or method == "FireServer") and tostring(self):find("Remotes") then
+                -- 🔍 PLACE
+                if args[1] == "GameStuff" and args[2] and args[2][1] == "Summon" then
+                    table.insert(macroSteps, {
+                        Type = "Place",
+                        UnitName = args[2][2],
+                        SpawnCFrame = args[2][3]
+                    })
+                    print("📌 Recorded Place:", args[2][2])
 
-            -- 🔍 UPGRADE
-            elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Upgrade" then
-                local unit = args[2][2]
-                local info = getUnitInfo(unit)
-                table.insert(macroSteps, {
-                    Type = "Upgrade",
-                    UnitName = info.Name,
-                    SpawnCFrame = info.SpawnCFrame,
-                    UpgradeLevel = info.UpgradeLevel
-                })
-                print("📌 Recorded Upgrade:", info.Name, "to level", info.UpgradeLevel)
+                -- 🔍 UPGRADE
+                elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Upgrade" then
+                    local unit = args[2][2]
+                    local info = getUnitInfo(unit)
+                    table.insert(macroSteps, {
+                        Type = "Upgrade",
+                        UnitName = info.Name,
+                        SpawnCFrame = info.SpawnCFrame,
+                        UpgradeLevel = info.UpgradeLevel
+                    })
+                    print("📌 Recorded Upgrade:", info.Name, "to level", info.UpgradeLevel)
 
-            -- 🔍 SELL
-            elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Sell" then
-                local unit = args[2][2]
-                local info = getUnitInfo(unit)
-                table.insert(macroSteps, {
-                    Type = "Sell",
-                    UnitName = info.Name,
-                    SpawnCFrame = info.SpawnCFrame
-                })
-                print("📌 Recorded Sell:", info.Name)
+                -- 🔍 SELL
+                elseif args[1] and args[1].Type == "GameStuff" and args[2] and args[2][1] == "Sell" then
+                    local unit = args[2][2]
+                    local info = getUnitInfo(unit)
+                    table.insert(macroSteps, {
+                        Type = "Sell",
+                        UnitName = info.Name,
+                        SpawnCFrame = info.SpawnCFrame
+                    })
+                    print("📌 Recorded Sell:", info.Name)
+                end
             end
+
+            return oldNamecall(self, unpack(args))
+        end)
+    else
+        if not recording then
+            warn("⚠️ Bạn chưa bật Macro.")
+            return
+        end
+        recording = false
+
+        -- Restore hook
+        mt.__namecall = oldNamecall
+        print("🛑 Macro stopped & hook restored.")
+
+        -- Save file
+        if writefile then
+            local data = HttpService:JSONEncode(macroSteps)
+            local fileName = "Macro_" .. playerName .. ".json"
+            writefile(fileName, data)
+            print("💾 Macro saved to", fileName)
+        else
+            print("⚠ Executor không hỗ trợ writefile.")
         end
 
-        return oldNamecall(self, unpack(args))
-    end)
-end)
-
--- 💾 Stop & Save
-MacroSection:AddButton("💾 Stop & Save Macro", function()
-    if not recording then
-        warn("⚠️ Bạn chưa bắt đầu ghi Macro.")
-        return
-    end
-    recording = false
-
-    -- Khôi phục hook
-    mt.__namecall = oldNamecall
-    print("🛑 Stopped recording & restored metatable.")
-
-    -- Lưu file
-    if writefile then
-        local data = HttpService:JSONEncode(macroSteps)
-        local fileName = "Macro_" .. playerName .. ".json"
-        writefile(fileName, data)
-        print("💾 Macro saved to", fileName)
-    else
-        print("⚠ Executor không hỗ trợ writefile.")
-    end
-
-    -- In log
-    print("✅ Macro Steps:")
-    for i, step in ipairs(macroSteps) do
-        print(i, HttpService:JSONEncode(step))
+        -- Log toàn bộ step
+        print("✅ Macro Steps:")
+        for i, step in ipairs(macroSteps) do
+            print(i, HttpService:JSONEncode(step))
+        end
     end
 end)
+
 
 
 
