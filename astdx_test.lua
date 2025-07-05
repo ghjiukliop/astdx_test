@@ -299,12 +299,9 @@ local playerName = player.Name
 local SetEvent = ReplicatedStorage.Remotes.SetEvent
 local GetFunction = ReplicatedStorage.Remotes.GetFunction
 
-local macroSteps = {}
-local stepIndex = 0
-local recording = false
-local mt = getrawmetatable(game)
-setreadonly(mt, false)
-local oldNamecall = mt.__namecall
+getgenv().MacroRecording = false
+getgenv().MacroSteps = {}
+getgenv().MacroStepIndex = 0
 
 local function cframeToString(cf)
     local components = {cf:GetComponents()}
@@ -314,81 +311,86 @@ local function cframeToString(cf)
     return table.concat(components, ",")
 end
 
+-- Chỉ hook __namecall duy nhất 1 lần
+if not getgenv().HookedMacro then
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    local oldNamecall = mt.__namecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        local money = tostring(player:FindFirstChild("Money") and player.Money.Value or 0)
+
+        if getgenv().MacroRecording and (self == SetEvent or self == GetFunction) then
+            if self == SetEvent and args[1] == "GameStuff" and args[2][1] == "Summon" then
+                getgenv().MacroStepIndex = getgenv().MacroStepIndex + 1
+                getgenv().MacroSteps[tostring(getgenv().MacroStepIndex)] = {
+                    type = "SpawnUnit",
+                    unit = args[2][2],
+                    cframe = cframeToString(args[2][3]),
+                    money = money
+                }
+                print("📌 Recorded Place:", args[2][2])
+
+            elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
+                local unit = args[2][2]
+                if unit and unit:FindFirstChild("SpawnCFrame") then
+                    getgenv().MacroStepIndex = getgenv().MacroStepIndex + 1
+                    getgenv().MacroSteps[tostring(getgenv().MacroStepIndex)] = {
+                        type = "UpgradeUnit",
+                        unit = unit.Name,
+                        cframe = cframeToString(unit.SpawnCFrame.Value),
+                        money = money
+                    }
+                    print("📌 Recorded Upgrade:", unit.Name)
+                end
+
+            elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
+                local unit = args[2][2]
+                if unit and unit:FindFirstChild("SpawnCFrame") then
+                    getgenv().MacroStepIndex = getgenv().MacroStepIndex + 1
+                    getgenv().MacroSteps[tostring(getgenv().MacroStepIndex)] = {
+                        type = "SellUnit",
+                        unit = unit.Name,
+                        cframe = cframeToString(unit.SpawnCFrame.Value),
+                        money = money
+                    }
+                    print("📌 Recorded Sell:", unit.Name)
+                end
+            end
+        end
+        return oldNamecall(self, unpack(args))
+    end)
+    getgenv().HookedMacro = true
+end
+
+-- GUI Toggle
 local MacroSection = MacroTab:AddSection("🎥 Macro Recorder")
 MacroSection:AddToggle("MacroRecorderToggle", {
-    Title = "🎥 Ghi Macro (Place / Upgrade / Sell)",
+    Title = "🎥2 Ghi Macro (Place / Upgrade / Sell)",
     Default = false,
     Tooltip = "Bật để bắt đầu ghi macro. Tắt để stop & save."
 }):OnChanged(function(val)
     if val then
-        if recording then
+        if getgenv().MacroRecording then
             warn("🚫 Macro đã đang chạy.")
             return
         end
-        recording = true
-        macroSteps = {}
-        stepIndex = 0
+        getgenv().MacroRecording = true
+        getgenv().MacroSteps = {}
+        getgenv().MacroStepIndex = 0
         print("🎬 Macro recording started...")
-
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
-            local money = tostring(player:FindFirstChild("Money") and player.Money.Value or 0)
-
-            -- chỉ lọc đúng Remote
-            if recording and (self == SetEvent or self == GetFunction) then
-                -- PLACE
-                if self == SetEvent and args[1] == "GameStuff" and args[2][1] == "Summon" then
-                    stepIndex = stepIndex + 1
-                    macroSteps[tostring(stepIndex)] = {
-                        type = "SpawnUnit",
-                        unit = args[2][2],
-                        cframe = cframeToString(args[2][3]),
-                        money = money
-                    }
-                    print("📌 Recorded Place:", args[2][2])
-
-                -- UPGRADE
-                elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Upgrade" then
-                    local unit = args[2][2]
-                    if unit and unit:FindFirstChild("SpawnCFrame") then
-                        stepIndex = stepIndex + 1
-                        macroSteps[tostring(stepIndex)] = {
-                            type = "UpgradeUnit",
-                            unit = unit.Name,
-                            cframe = cframeToString(unit.SpawnCFrame.Value),
-                            money = money
-                        }
-                        print("📌 Recorded Upgrade:", unit.Name)
-                    end
-
-                -- SELL
-                elseif self == GetFunction and args[1] and args[1].Type == "GameStuff" and args[2][1] == "Sell" then
-                    local unit = args[2][2]
-                    if unit and unit:FindFirstChild("SpawnCFrame") then
-                        stepIndex = stepIndex + 1
-                        macroSteps[tostring(stepIndex)] = {
-                            type = "SellUnit",
-                            unit = unit.Name,
-                            cframe = cframeToString(unit.SpawnCFrame.Value),
-                            money = money
-                        }
-                        print("📌 Recorded Sell:", unit.Name)
-                    end
-                end
-            end
-            return oldNamecall(self, unpack(args))
-        end)
     else
-        if not recording then
+        if not getgenv().MacroRecording then
             warn("⚠️ Macro chưa bật.")
             return
         end
-        recording = false
-        mt.__namecall = oldNamecall
+        getgenv().MacroRecording = false
         print("🛑 Macro stopped.")
 
-        local saveData = macroSteps
+        -- Save file
+        local saveData = getgenv().MacroSteps
         saveData["Data"] = {
             Map = "UnknownMap",
             RecordMode = "Money",
