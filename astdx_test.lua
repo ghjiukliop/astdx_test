@@ -289,8 +289,7 @@ local function setupSaveEvents()
     end
 end
 
--- ...existing code...
-local Players = game:GetService("Players")
+-- ...existing code...local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
@@ -337,8 +336,8 @@ MacroSection:AddToggle("MacroRecorderToggle", {
                     table.insert(macroSteps, {
                         Type = "Place",
                         UnitName = args[2][2],
-                        SpawnCFrame = args[2][3],
-                        UpgradeLevel = 0 -- mặc định khi place
+                        SpawnCFrame = args[2][3], -- dùng vị trí client gọi
+                        UpgradeLevel = 0
                     })
                     print("📌 Recorded Place:", args[2][2], args[2][3])
 
